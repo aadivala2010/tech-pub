@@ -527,8 +527,10 @@ def replace_docx_images(docx_path, changes, gallery, log):
         namelist = z.namelist()
         rels = _parse_rels(z.read("word/_rels/document.xml.rels"))
         log(f"  [img] DOCX archive contains {len(namelist)} entries; sample: {namelist[:5]}")
-        # Fallback: if no proximity-based image mappings found, apply to all images in the doc
-        if not rid_to_newimg:
+        # Fallback: if no proximity-based image mappings found, apply to all images in the doc.
+        # Requires new_img_path — without a gallery match there is nothing to write, and
+        # mapping rIds to None used to crash open() further down.
+        if not rid_to_newimg and new_img_path:
             log("  [img] Fallback: applying replacement to all images in document using new image.")
             for rid, target in rels.items():
                 # Rels targets are relative to word/, so they appear as "media/..."
@@ -635,8 +637,12 @@ def replace_docx_images(docx_path, changes, gallery, log):
     except Exception as e:
         if os.path.exists(tmp):
             os.remove(tmp)
-        log(f"  [img] ERROR during image swap: {e}")
-        raise
+        # Best-effort: the text rewrite is already saved into docx_path. Raising here
+        # made run_pipeline delete that output, throwing away completed text work
+        # because of a picture. Report it and keep the text changes.
+        log(f"  [img] ERROR during image swap (text changes kept): {e}")
+        _dbg(log, traceback.format_exc())
+        return False
 
     return swapped
 

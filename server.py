@@ -134,14 +134,19 @@ def api_stream(job_id: str):
 
     def _generate():
         q = _jobs[job_id]["queue"]
-        while True:
-            try:
-                evt = q.get(timeout=25)
-                yield f"data: {json.dumps(evt)}\n\n"
-                if evt.get("type") == "done":
-                    break
-            except queue.Empty:
-                yield 'data: {"type":"ping"}\n\n'
+        try:
+            while True:
+                try:
+                    evt = q.get(timeout=25)
+                    yield f"data: {json.dumps(evt)}\n\n"
+                    if evt.get("type") == "done":
+                        break
+                except queue.Empty:
+                    yield 'data: {"type":"ping"}\n\n'
+        finally:
+            # Runs on normal finish and on client disconnect (GeneratorExit), so
+            # repeated runs don't accumulate job entries for the life of the process.
+            _jobs.pop(job_id, None)
 
     return Response(
         _generate(),
